@@ -300,7 +300,7 @@ Construct a new gradient descent optimizer.
 
 ### `class tf.train.AdadeltaOptimizer` {#AdadeltaOptimizer}
 
-Optimizer that implements the Adadelta algorithm. 
+Optimizer that implements the Adadelta algorithm.
 
 See [M. D. Zeiler](http://arxiv.org/abs/1212.5701)
 ([pdf](http://arxiv.org/pdf/1212.570.pdf))
@@ -721,11 +721,11 @@ the global norm with `use_norm`.
 
 To perform the clipping, the values `t_list[i]` are set to:
 
-    t_list[i] * clip_norm / max(global_norm, clip_norm)
+`t_list[i] * clip_norm / max(global_norm, clip_norm)`
 
 where:
 
-    global_norm = sqrt(sum([l2norm(t)**2 for t in t_list]))
+`global_norm = sqrt(sum([l2norm(t)**2 for t in t_list]))`
 
 If `clip_norm > global_norm` then the entries in `t_list` remain as they are,
 otherwise they're all shrunk by the global ratio.
@@ -1712,8 +1712,8 @@ with tf.Graph().as_default():
 
 In the *chief* task, the `Supervisor` works exactly as in the first example
 above.  In the other tasks `sv.managed_session()` waits for the Model to have
-been intialized before returning a session to the training code.  The
-non-chief tasks depend on the chief taks for initializing the model.
+been initialized before returning a session to the training code.  The
+non-chief tasks depend on the chief task for initializing the model.
 
 If one of the tasks crashes and restarts, `managed_session()`
 checks if the Model is initialized.  If yes, it just creates a session and
@@ -3094,7 +3094,7 @@ commonly done to report evaluation results in event files.
 
 Adds a `SessionLog` protocol buffer to the event file.
 
-This method wraps the provided session in an `Event` procotol buffer
+This method wraps the provided session in an `Event` protocol buffer
 and adds it to the event file.
 
 ##### Args:
@@ -3618,5 +3618,3 @@ device assignments have not changed.
 
   A None value is returned if no variables exist in the `MetaGraphDef`
   (i.e., there are no variables to restore).
-
-

@@ -214,7 +214,7 @@ class ExponentialMovingAverage(object):
     ops to maintain moving averages.
 
     The optional `num_updates` parameter allows one to tweak the decay rate
-    dynamically. .  It is typical to pass the count of training steps, usually
+    dynamically. It is typical to pass the count of training steps, usually
     kept in a variable that is incremented at each step, in which case the
     decay rate is lower at the start of training.  This makes moving averages
     move faster.  If passed, the actual decay rate used is:

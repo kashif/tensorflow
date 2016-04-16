@@ -106,8 +106,8 @@ class Supervisor(object):
 
   In the *chief* task, the `Supervisor` works exactly as in the first example
   above.  In the other tasks `sv.managed_session()` waits for the Model to have
-  been intialized before returning a session to the training code.  The
-  non-chief tasks depend on the chief taks for initializing the model.
+  been initialized before returning a session to the training code.  The
+  non-chief tasks depend on the chief task for initializing the model.
 
   If one of the tasks crashes and restarts, `managed_session()`
   checks if the Model is initialized.  If yes, it just creates a session and

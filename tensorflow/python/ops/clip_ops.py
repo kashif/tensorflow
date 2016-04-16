@@ -153,11 +153,11 @@ def clip_by_global_norm(t_list, clip_norm, use_norm=None, name=None):
 
   To perform the clipping, the values `t_list[i]` are set to:
 
-      t_list[i] * clip_norm / max(global_norm, clip_norm)
+  `t_list[i] * clip_norm / max(global_norm, clip_norm)`
 
   where:
 
-      global_norm = sqrt(sum([l2norm(t)**2 for t in t_list]))
+  `global_norm = sqrt(sum([l2norm(t)**2 for t in t_list]))`
 
   If `clip_norm > global_norm` then the entries in `t_list` remain as they are,
   otherwise they're all shrunk by the global ratio.
