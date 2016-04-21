@@ -64,36 +64,6 @@ namespace cuda {
 
 PLUGIN_REGISTRY_DEFINE_PLUGIN_ID(kCuDnnPlugin);
 
-string ToString(cudnnStatus_t status) {
-  switch (status) {
-    case CUDNN_STATUS_SUCCESS:
-      return "CUDNN_STATUS_SUCCESS";
-    case CUDNN_STATUS_NOT_INITIALIZED:
-      return "CUDNN_STATUS_NOT_INITIALIZED";
-    case CUDNN_STATUS_ALLOC_FAILED:
-      return "CUDNN_STATUS_ALLOC_FAILED";
-    case CUDNN_STATUS_BAD_PARAM:
-      return "CUDNN_STATUS_BAD_PARAM";
-    case CUDNN_STATUS_INTERNAL_ERROR:
-      return "CUDNN_STATUS_INTERNAL_ERROR";
-    case CUDNN_STATUS_INVALID_VALUE:
-      return "CUDNN_STATUS_INVALID_VALUE";
-    case CUDNN_STATUS_ARCH_MISMATCH:
-      return "CUDNN_STATUS_ARCH_MISMATCH";
-    case CUDNN_STATUS_MAPPING_ERROR:
-      return "CUDNN_STATUS_MAPPING_ERROR";
-    case CUDNN_STATUS_EXECUTION_FAILED:
-      return "CUDNN_STATUS_EXECUTION_FAILED";
-    case CUDNN_STATUS_NOT_SUPPORTED:
-      return "CUDNN_STATUS_NOT_SUPPORTED";
-    case CUDNN_STATUS_LICENSE_ERROR:
-      return "CUDNN_STATUS_LICENSE_ERROR";
-    default:
-      return port::StrCat("<unknown cudnn status: ", static_cast<int>(status),
-                          ">");
-  }
-}
-
 namespace dynload {
 
 static port::ThreadPool* InitCudnnThreadpool() {
@@ -132,6 +102,17 @@ size_t cudnnGetVersion() {
   }
   auto callable = reinterpret_cast<size_t (*)(void)>(f);
   return callable();
+}
+
+// Calls cudnnGetErrorString in the loaded DSO.
+const char* cudnnGetErrorString(cudnnStatus_t status) {
+  static void* f = dlsym(GetDsoHandle(), "cudnnGetErrorString");
+  if (f == nullptr) {
+    LOG(FATAL) << "could not find cudnnGetErrorString in cudnn DSO; dlerror: "
+               << dlerror();
+  }
+  auto callable = reinterpret_cast<const char* (*)(cudnnStatus_t)>(f);
+  return callable(status);
 }
 
 // Returns whether the currently loaded cuDNN version is R2.
@@ -275,7 +256,8 @@ CudnnSupport::CudnnSupport(CUDAExecutor* parent)
 CudnnSupport::~CudnnSupport() {
   auto status = dynload::cudnnDestroy(parent_, ToHandle(dnn_handle_));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "could not destroy cudnn handle: " << ToString(status);
+    LOG(ERROR) << "could not destroy cudnn handle: "
+               << cudnnGetErrorString(status);
   }
 }
 
@@ -302,7 +284,8 @@ port::Status CudnnSupport::Init() {
     return port::Status::OK();
   }
 
-  LOG(ERROR) << "could not create cudnn handle: " << ToString(status);
+  LOG(ERROR) << "could not create cudnn handle: "
+             << cudnnGetErrorString(status);
   if (status == CUDNN_STATUS_NOT_INITIALIZED) {
     // This is the error code that the driver returns when we're not running a
     // sufficient CUDA driver -- cudnn requires 6.5+ compatibility, which
@@ -323,7 +306,7 @@ port::Status CudnnSupport::Init() {
 
   return port::Status{port::error::INTERNAL,
                       port::StrCat("cudnn library could not create a handle: ",
-                                   ToString(status))};
+                                   cudnnGetErrorString(status))};
 }
 
 // Turns a BatchDescriptor structure into a cudnn tensor handle within a scope.
@@ -337,7 +320,7 @@ class ScopedTensorDescriptor {
         dynload::cudnnCreateTensorDescriptor(parent_, &handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not create cudnn tensor descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
 
     cudnnTensorFormat_t format;
@@ -362,7 +345,7 @@ class ScopedTensorDescriptor {
         CheckedNarrowing<int64, int>(batch_descriptor.width()));
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not set cudnn tensor descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -371,7 +354,7 @@ class ScopedTensorDescriptor {
         dynload::cudnnDestroyTensorDescriptor(parent_, handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(ERROR) << "could not destroy cudnn tensor descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -396,7 +379,7 @@ class ScopedFilterDescriptor {
         dynload::cudnnCreateFilterDescriptor(parent_, &handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not create cudnn filter descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
 
     // TODO(b/23032134): Even if the filter layout is not supported,
@@ -428,7 +411,7 @@ class ScopedFilterDescriptor {
         CheckedNarrowing<int64, int>(filter_descriptor.input_filter_width()));
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not set cudnn filter descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -437,7 +420,7 @@ class ScopedFilterDescriptor {
         dynload::cudnnDestroyFilterDescriptor(parent_, handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(ERROR) << "could not destroy cudnn filter descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -464,7 +447,7 @@ class ScopedConvolutionDescriptor {
         dynload::cudnnCreateConvolutionDescriptor(parent_, &handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not create cudnn convolution descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
 
     status = dynload::cudnnSetConvolution2dDescriptor(
@@ -484,7 +467,7 @@ class ScopedConvolutionDescriptor {
         CUDNN_CROSS_CORRELATION);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not set cudnn convolution descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -493,7 +476,7 @@ class ScopedConvolutionDescriptor {
         dynload::cudnnDestroyConvolutionDescriptor(parent_, handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(ERROR) << "could not destroy cudnn convolution descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -537,7 +520,7 @@ class ScopedPoolingDescriptor {
         CheckedNarrowing<int64, int>(pooling_descriptor.horizontal_stride()));
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not set cudnn pooling descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
   ~ScopedPoolingDescriptor() {
@@ -545,7 +528,7 @@ class ScopedPoolingDescriptor {
         dynload::cudnnDestroyPoolingDescriptor(parent_, handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(ERROR) << "could not destroy cudnn pooling descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -571,7 +554,7 @@ class ScopedActivationDescriptor {
         dynload::cudnnCreateActivationDescriptor(parent_, &handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not create cudnn activation descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
 
     double relu_ceiling = 0.0;
@@ -606,7 +589,7 @@ class ScopedActivationDescriptor {
         mode, nan_propagation, relu_ceiling);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "could not set cudnn activation descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -615,7 +598,7 @@ class ScopedActivationDescriptor {
         dynload::cudnnDestroyActivationDescriptor(parent_, handle_);
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(ERROR) << "could not destroy cudnn activation descriptor: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
     }
   }
 
@@ -648,7 +631,8 @@ bool CudnnSupport::DoConvolve(
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(FATAL) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(FATAL) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
   }
   // Alpha is the scaling factor for input.
   float alpha = 1.0;
@@ -714,7 +698,7 @@ bool CudnnSupport::DoConvolve(
 
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(FATAL) << "failed to enqueue convolution on stream: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -779,7 +763,8 @@ bool CudnnSupport::DoConvolveBackwardData(
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(FATAL) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(FATAL) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
   }
 
   // Alpha is the scaling factor for input.
@@ -817,7 +802,7 @@ bool CudnnSupport::DoConvolveBackwardData(
         in_back_4d.handle(), backward_input_data->opaque());
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "failed to enqueue convolution on stream: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
       return false;
     }
     return true;
@@ -902,7 +887,7 @@ bool CudnnSupport::DoConvolveBackwardData(
       /*gradData=*/backward_input_data->opaque());
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(FATAL) << "failed to enqueue convolution on stream: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
   return true;
@@ -922,7 +907,8 @@ bool CudnnSupport::DoConvolveBackwardFilter(
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(FATAL) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(FATAL) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
   }
 
   // Alpha is the scaling factor for input.
@@ -959,7 +945,7 @@ bool CudnnSupport::DoConvolveBackwardFilter(
         backward_filter_data->opaque());
     if (status != CUDNN_STATUS_SUCCESS) {
       LOG(FATAL) << "failed to enqueue convolution on stream: "
-                 << ToString(status);
+                 << cudnnGetErrorString(status);
       return false;
     }
     return true;
@@ -1043,7 +1029,7 @@ bool CudnnSupport::DoConvolveBackwardFilter(
       /*gradData=*/backward_filter_data->opaque());
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(FATAL) << "failed to enqueue convolution on stream: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
   return true;
@@ -1219,7 +1205,8 @@ bool CudnnSupport::DoBiasAdd(Stream* stream,
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(ERROR) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -1270,7 +1257,8 @@ bool CudnnSupport::DoActivate(Stream* stream,
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(ERROR) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -1321,8 +1309,8 @@ bool CudnnSupport::DoActivate(Stream* stream,
       &alpha, input_4d.handle(),
       input_data.opaque(), &beta, input_4d.handle(), output_data->opaque());
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "stream " << stream
-               << " could not enqueue activation: " << ToString(status);
+    LOG(ERROR) << "stream " << stream << " could not enqueue activation: "
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -1339,7 +1327,8 @@ bool CudnnSupport::DoPoolForward(
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(ERROR) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -1358,7 +1347,7 @@ bool CudnnSupport::DoPoolForward(
       output_data->opaque());
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(ERROR) << "failed to enqueue forward pooling on stream: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
   return true;
@@ -1376,7 +1365,8 @@ bool CudnnSupport::DoPoolBackward(
   auto status = dynload::cudnnSetStream(parent_, ToHandle(dnn_handle_),
                                         AsCUDAStreamValue(stream));
   if (status != CUDNN_STATUS_SUCCESS) {
-    LOG(ERROR) << "failed to set stream for cudnn handle: " << ToString(status);
+    LOG(ERROR) << "failed to set stream for cudnn handle: "
+               << cudnnGetErrorString(status);
     return false;
   }
 
@@ -1396,7 +1386,7 @@ bool CudnnSupport::DoPoolBackward(
       src_desc.handle(), output_diff_data->opaque());
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(ERROR) << "failed to enqueue backward pooling on stream: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
   return true;
@@ -1513,7 +1503,7 @@ bool CudnnSupport::DeriveOutputBatchDescriptor(
       parent_, conv.handle(), input_4d.handle(), filter.handle(), 4, dims);
   if (status != CUDNN_STATUS_SUCCESS) {
     LOG(ERROR) << "could not get output tensor for convolution: "
-               << ToString(status);
+               << cudnnGetErrorString(status);
     return false;
   }
 
